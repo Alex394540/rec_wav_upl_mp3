@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<title>Recorder&&Converter</title>
+
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+<link rel="stylesheet" type="text/css" href="styles.css">
+
+</head>
+
+<body>
+<div id="block">
+<h1>Start your recording</h1>
+
+  <span id="start" class="glyphicon glyphicon-record" onclick="startRecording(this);" onMouseOver="this.style.cursor='pointer'" aria-hidden="true"></span>
+  <span id="pause" class="glyphicon glyphicon-pause disabledbutton" onclick="pause(this);" onMouseOver="this.style.cursor='pointer'" aria-hidden="true"></span>
+  <span id="stop" class="glyphicon glyphicon-stop disabledbutton" onclick="stopRecording(this);" onMouseOver="this.style.cursor='pointer'" aria-hidden="true"></span>
+  <span id="newrep" class="glyphicon glyphicon-repeat disabledbutton" onclick="recordNew();" onMouseOver="this.style.cursor='pointer'" aria-hidden="true"></span>
+  <span id="save" class="glyphicon glyphicon-ok disabledbutton" onclick="saveThis();" onMouseOver="this.style.cursor='pointer'" aria-hidden="true"></span>
+  
+  <h2 id="waiting"></h2>
+  <div class="row" id="mainDiv"></div>
+</div>
+
+  <script>
+
+  var audio_context;
+  var recorder;
+  var recorded_file;
+	
+  function startUserMedia(stream) {
+    var input = audio_context.createMediaStreamSource(stream);    
+    recorder = new Recorder(input, {numChannels: 1});
+  }
+
+  function startRecording(button) {
+    recorder && recorder.record();
+    toggling(button);
+	toggling(document.querySelector("#pause"));
+    toggling(document.querySelector("#stop"));
+  }
+
+  function stopRecording(button) {
+    recorder && recorder.stop();
+    toggling(button);
+    createDownloadLink();
+    recorder.clear();
+  }
+
+  function createDownloadLink() {
+    recorder && recorder.exportWAV(function(blob) {
+      var url = URL.createObjectURL(blob);
+      var div = document.createElement('div');
+      var au = document.createElement('audio');
+      
+      au.controls = true;
+      au.src = url;
+	  div.class = "col-lg-6";
+	  div.appendChild(au);
+      mainDiv.appendChild(div);
+	  recorded_file = blob;
+	  document.querySelector("#start").classList.add("disabledbutton");
+	  toggling(document.querySelector("#save"));
+	  toggling(document.querySelector("#newrep"));	  
+	  toggling(document.querySelector("#pause"));
+    });
+  }
+  
+  function encodeMono(channels, sampleRate, samples) {
+      var buffer = [];
+      var mp3enc = new lamejs.Mp3Encoder(channels, sampleRate, 64);
+      var remaining = samples.length;
+      var maxSamples = 1152;
+      for (var i = 0; remaining >= maxSamples; i += maxSamples) {
+          var mono = samples.subarray(i, i + maxSamples);
+          var mp3buf = mp3enc.encodeBuffer(mono);
+          if (mp3buf.length > 0) {
+              buffer.push(new Int8Array(mp3buf));
+          }
+          remaining -= maxSamples;
+      }
+      var d = mp3enc.flush();
+      if(d.length > 0){
+          buffer.push(new Int8Array(d));
+      }
+      var blob = new Blob(buffer, {type: 'audio/mp3'});
+      return blob;
+    }
+	
+    function upload(blob) {		
+		var arrayBuffer;
+        var fileReader = new FileReader();
+        fileReader.onload = function() {
+            arrayBuffer = this.result;
+			var wav = lamejs.WavHeader.readHeader(new DataView(arrayBuffer));
+		    var samples = new Int16Array(arrayBuffer, wav.dataOffset, wav.dataLen / 2);
+		    var new_blob = encodeMono(wav.channels, wav.sampleRate, samples);
+			
+		    var xhr=new XMLHttpRequest();
+		    xhr.onload=function(e) {
+			    if(this.readyState === 4) {
+				    alert("Recording was successfully sent to the server");
+					console.log(this.responseText);
+				    self.close(true);
+			    }
+		    };
+			
+			var fd=new FormData();
+			var raw_name = 'example.mp3';
+			fd.append("userfile", new_blob, raw_name);
+			xhr.open("POST","<url>",true);
+			xhr.send(fd);
+        };
+        fileReader.readAsArrayBuffer(blob);
+	}
+    
+	function saveThis() {
+		setInterval(waitServer, 1000, document.querySelector("#waiting"));
+		upload(recorded_file);
+	}
+	
+	function toggling(elem) {
+		elem.classList.toggle("disabledbutton");
+	}
+	
+    window.onload = function init() {
+      try {
+        window.AudioContext = window.AudioContext || window.webkitAudioContext;
+        navigator.mediaDevices.getUserMedia = navigator.mediaDevices.getUserMedia || navigator.webkitGetUserMedia;
+        window.URL = window.URL || window.webkitURL; 
+        audio_context = new AudioContext;
+      } catch (e) {
+        alert('No web audio support in this browser!');
+      };
+    
+    navigator.mediaDevices.getUserMedia({audio: true}).then(startUserMedia).catch(function(e) {
+      alert('No live audio input: ' + e);
+    });
+  };
+  
+    function recordNew(button) {
+	  mainDiv.innerHTML = '';
+	  document.querySelector("#start").classList.remove("disabledbutton");
+	  document.querySelector("#pause").classList.add("disabledbutton");
+	  document.querySelector("#pause").classList.add("glyphicon-pause");
+	  document.querySelector("#pause").classList.remove("glyphicon-play");
+	  document.querySelector("#stop").classList.add("disabledbutton");
+	  document.querySelector("#newrep").classList.add("disabledbutton");
+	  document.querySelector("#save").classList.add("disabledbutton");
+  }
+  
+    function waitServer(elem) {
+		elem.innerHTML += ".";
+	}
+  
+    function pause(button) {
+	  recorder.recording = !recorder.recording;
+	  toggling(document.querySelector("#stop"));
+	  document.querySelector("#start").classList.add("disabledbutton");
+	  document.querySelector("#pause").classList.add("glyphicon-play");
+	  document.querySelector("#pause").classList.remove("glyphicon-pause");
+  }
+  </script>
+  <script src="recorder.js"></script>
+  <script src="lamejs/lame.all.js"></script>
+  
+</body>
+</html>

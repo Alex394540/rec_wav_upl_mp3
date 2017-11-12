@@ -1,0 +1,21 @@
+body {
+    background-image: url("images/background.jpeg");
+	background-size: 100%;
+	text-align: center;
+}
+
+#block {
+	padding: 300px 0;
+	margin: auto;
+}
+
+.disabledbutton {
+    pointer-events: none;
+    opacity: 0.4;
+}
+
+.glyphicon {
+	font-size: 60px;
+	width: 70px;
+	height: 70px;
+}
